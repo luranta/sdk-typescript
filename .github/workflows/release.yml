@@ -21,6 +21,82 @@ jobs:
       contents: read
       id-token: write
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify release metadata
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs"
+          const packageJson = JSON.parse(readFileSync("package.json", "utf8"))
+          const tag = process.env.GITHUB_REF_TYPE === "tag" ? process.env.GITHUB_REF_NAME : null
+          if (
+            packageJson.name !== "@luranta/sdk" ||
+            typeof packageJson.version !== "string" ||
+            packageJson.private !== false ||
+            packageJson.repository?.url !== "git+https://github.com/luranta/sdk-typescript.git" ||
+            packageJson.repository?.directory !== undefined ||
+            packageJson.publishConfig?.access !== "public" ||
+            packageJson.publishConfig?.provenance !== true ||
+            (tag !== null && tag.slice(1) !== packageJson.version)
+          ) throw new Error("Public TypeScript SDK release metadata is invalid.")
+          NODE
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+      - name: Install release Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.5.1
+          package-manager-cache: false
+      - name: Install npm trusted-publishing client
+        run: |
+          npm install --global --no-audit --no-fund npm@11.5.1
+          test "$(npm --version)" = "11.5.1"
+      - name: Install exact dependencies
+        run: bun install --frozen-lockfile --omit optional
+      - name: Verify and pack package
+        run: |
+          set -euo pipefail
+          bun run verify
+          mkdir -p "$RUNNER_TEMP/luranta-sdk-package" "$RUNNER_TEMP/luranta-sdk-consumer"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/luranta-sdk-package"
+          npm install --ignore-scripts --no-audit --no-fund \
+            --prefix "$RUNNER_TEMP/luranta-sdk-consumer" \
+            "$RUNNER_TEMP/luranta-sdk-package/"*.tgz
+          cd "$RUNNER_TEMP/luranta-sdk-consumer"
+          node --input-type=module -e 'const sdk = await import("@luranta/sdk"); if (typeof sdk.Luranta !== "function") throw new Error("Packed SDK entrypoint is invalid.")'
+      - name: Publish with npm trusted publishing
+        run: npm publish "$RUNNER_TEMP/luranta-sdk-package/"*.tgz --access public --ignore-scripts --provenance
+name: Publish TypeScript SDK
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-npm-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ github.repository == 'luranta/sdk-typescript' && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')) }}
+    environment:
+      name: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Check out the tagged source
