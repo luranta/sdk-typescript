@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": false,
+    "declaration": true,
+    "isolatedDeclarations": true,
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
+    "noUncheckedIndexedAccess": true,
+    "strict": true,
+    "target": "ES2024",
+    "types": ["bun"],
+    "verbatimModuleSyntax": true
+  },
+  "include": ["scripts/**/*.ts", "src/**/*.ts", "tests/**/*.ts"]
+}

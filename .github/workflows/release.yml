@@ -1,0 +1,57 @@
+name: Release TypeScript SDK
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write # sigstore provenance + npm trusted publishing
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Validate public release metadata
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs"
+          const packageJson = JSON.parse(readFileSync("package.json", "utf8"))
+          const tagVersion = process.env.GITHUB_REF_NAME.slice(1)
+          if (
+            packageJson.name !== "@luranta/sdk" ||
+            packageJson.version !== tagVersion ||
+            packageJson.private !== false ||
+            packageJson.repository?.url !== "git+https://github.com/luranta/sdk-typescript.git" ||
+            packageJson.repository?.directory !== undefined ||
+            packageJson.publishConfig?.access !== "public" ||
+            packageJson.publishConfig?.provenance !== true
+          ) throw new Error("Public TypeScript SDK release metadata is invalid.")
+          NODE
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type-check
+        run: bun run check
+
+      - name: Build
+        run: bun run build
+
+      - name: Test
+        run: bun run test && bun run test:node
+
+      - name: Publish @luranta/sdk with provenance
+        run: |
+          npm publish --access public --provenance --tag latest
