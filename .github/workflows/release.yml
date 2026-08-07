@@ -74,7 +74,7 @@ jobs:
           npm install --global --no-audit --no-fund npm@11.5.1
           test "$(npm --version)" = "11.5.1"
       - name: Install exact dependencies
-        run: bun install --frozen-lockfile --omit optional
+        run: bun install --frozen-lockfile
       - name: Verify and pack package
         run: |
           set -euo pipefail
