@@ -1,0 +1,178 @@
+{
+  "files": [
+    {
+      "path": ".github/workflows/release.yml",
+      "sha256": "62cb523f588824037e57392b092a4f1bb0ad5d6acb2edf97cd77a36120903af8",
+      "size": 17158
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "52a3c353d33b3a8ad410f92c02a4b5f8905feec3edaf4d827475af3eef1decc9",
+      "size": 1064
+    },
+    {
+      "path": "README.md",
+      "sha256": "7c37bcca989d53afe774da7c3de87e9c2d47ab53deaad44531624386c90bacbd",
+      "size": 2429
+    },
+    {
+      "path": "bun.lock",
+      "sha256": "de71901013c9fcf4da55f81f38e083f2323e6a1a6c6c6bf89a901ada85fe31dd",
+      "size": 8136
+    },
+    {
+      "path": "package.json",
+      "sha256": "ed9240a649605a8314e13294e1728b96163bdb61af37a02eb4aa4eab5a08a77b",
+      "size": 1204
+    },
+    {
+      "path": "scripts/check-browser.ts",
+      "sha256": "9bc90d0835b67e6d69076ee22134ba060289ab4b6ec508e42d37fad5194b0e60",
+      "size": 785
+    },
+    {
+      "path": "src/client.ts",
+      "sha256": "069cf22c9a2640ab1fd84a5f28174772246738c8cebc80d07b28e8b55646e49a",
+      "size": 11225
+    },
+    {
+      "path": "src/errors.ts",
+      "sha256": "1aa7fe035d388fe2d7adbe915915c31660ee7168643fc9f5c9f4a7f03b0237c3",
+      "size": 799
+    },
+    {
+      "path": "src/generated/client.gen.ts",
+      "sha256": "281bcfa285f475cefb080d7d0d81d4b16363f1a3e3f2c7c9c4bea1ec59875210",
+      "size": 866
+    },
+    {
+      "path": "src/generated/client/client.gen.ts",
+      "sha256": "940501b6491ba15326161f97f6e2b0a8300b0a865b8f061c119a2299a20b13ab",
+      "size": 7899
+    },
+    {
+      "path": "src/generated/client/index.ts",
+      "sha256": "acd2b749181050a8297f24ac3db4f3941ca0a66c049e5b984f29f0e98c8329f8",
+      "size": 891
+    },
+    {
+      "path": "src/generated/client/types.gen.ts",
+      "sha256": "dbdf46313e3747538c35f8488217a7ef3b3372908f13032323011d351c9ee21a",
+      "size": 7076
+    },
+    {
+      "path": "src/generated/client/utils.gen.ts",
+      "sha256": "f21c22bd8f37a0d0fa4008c4d70bb7e7a4b74afa8c5b9d05dda9b39f1c89424c",
+      "size": 8521
+    },
+    {
+      "path": "src/generated/core/auth.gen.ts",
+      "sha256": "d093b185782b56c5f71276a9d9d10b7d8fb0cbdf9eec0db2506911a19e1908e0",
+      "size": 1104
+    },
+    {
+      "path": "src/generated/core/bodySerializer.gen.ts",
+      "sha256": "2d67c2cf9c93bc11386da827d053fea6727a57828f2916cd965f8798da2c8ec5",
+      "size": 2539
+    },
+    {
+      "path": "src/generated/core/params.gen.ts",
+      "sha256": "a74054c62dea29e7e9de20aad6560abe40d4119ccc92a3250f1baf7a38d280f3",
+      "size": 4344
+    },
+    {
+      "path": "src/generated/core/pathSerializer.gen.ts",
+      "sha256": "be3eae7257ed2b077d8d077d8ecc09cc6616a8d34ee38dac3e23969daff39574",
+      "size": 4319
+    },
+    {
+      "path": "src/generated/core/queryKeySerializer.gen.ts",
+      "sha256": "adc570c9357a08624cce81dc503abd8d8ff60a76d25bd4d3a4afbe349d82d1f0",
+      "size": 2922
+    },
+    {
+      "path": "src/generated/core/serverSentEvents.gen.ts",
+      "sha256": "b15c55b095f981a93741a8f335c58949b5dff1ac0b07fc30edba7e7a29baf453",
+      "size": 7629
+    },
+    {
+      "path": "src/generated/core/types.gen.ts",
+      "sha256": "e5c208da029688d56bb778490e4e796bf5ad1573bccff46e734cd663491bf1b5",
+      "size": 3567
+    },
+    {
+      "path": "src/generated/core/utils.gen.ts",
+      "sha256": "76ab399d380870b67c7a1b83bfffdfc1e49313f29405c69ea83fd8b6025a3e9a",
+      "size": 3495
+    },
+    {
+      "path": "src/generated/index.ts",
+      "sha256": "a585ab752ae7fb5f849c4db963bdd869af097ef6406523e28c295e77f8a06742",
+      "size": 1667
+    },
+    {
+      "path": "src/generated/sdk.gen.ts",
+      "sha256": "61a2044bc5370a29894e58f6f7ddd2a11247345bb1dfd7ee2d144353a8fcfe0d",
+      "size": 10075
+    },
+    {
+      "path": "src/generated/types.gen.ts",
+      "sha256": "d1dba72fc3ba6866c938d56771863f2a040b3dc50177574e84db28225a756b27",
+      "size": 55839
+    },
+    {
+      "path": "src/index.ts",
+      "sha256": "47265ad4a811b0e0579e193d7d5f424ac257562c572a7d78b7a14a61dd2865cc",
+      "size": 702
+    },
+    {
+      "path": "src/transport.ts",
+      "sha256": "65acdb8eb74e7bb05ce49676e92415ff4acd6db97e85db6e74b63437f000bc59",
+      "size": 7172
+    },
+    {
+      "path": "tests/client.test.ts",
+      "sha256": "5525bc79a1d0bfdd3f620bc9d43cca8f57d3477363562e7e0dbf471de8eee808",
+      "size": 9917
+    },
+    {
+      "path": "tests/node-smoke.ts",
+      "sha256": "4cc75fb222f2a6c790a44bea3513da9db6f2b6221da7339ca2fb1a51bb152070",
+      "size": 1087
+    },
+    {
+      "path": "tsconfig.base.json",
+      "sha256": "f446ed0752cf72b2a1b94cb10f168c5832c7cd09c8c90058e66b7d5e6be39dc0",
+      "size": 992
+    },
+    {
+      "path": "tsconfig.browser.json",
+      "sha256": "04bacf399111e672c9e2de875aee399258f4f585fab2f22427d2722226da6755",
+      "size": 117
+    },
+    {
+      "path": "tsconfig.build.json",
+      "sha256": "d95e5e529d4503a9beb8f16fe5259a9bd144153e548c4cd4a137bf44fd57cf01",
+      "size": 275
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "e8baa41521e3c238211332f6b62b3842ceb628439bbe66fa5de3d5ed185e93a6",
+      "size": 551
+    },
+    {
+      "path": "tsconfig.node.json",
+      "sha256": "04bacf399111e672c9e2de875aee399258f4f585fab2f22427d2722226da6755",
+      "size": 117
+    }
+  ],
+  "repository": "luranta/sdk-typescript",
+  "schemaVersion": 1,
+  "source": {
+    "commit": "e3cf9b4d7f99dd637eb5d4f1039979188246f97a",
+    "repository": "luranta/jobs"
+  },
+  "tag": "v0.1.0",
+  "treeSha256": "77258c708ac560de14777cfb87c86092f4e4587b6f52094d0f1be6e1c98a23da",
+  "version": "0.1.0"
+}

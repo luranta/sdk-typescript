@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": false,
+    "composite": false,
+    "declaration": true,
+    "emitDeclarationOnly": false,
+    "isolatedDeclarations": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
+    "paths": {
+      "@luranta/sdk": [
+        "./src/index.ts"
+      ]
+    },
+    "types": [
+      "bun-types"
+    ],
+    "verbatimModuleSyntax": true
+  },
+  "include": [
+    "scripts/check-browser.ts",
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ]
+}

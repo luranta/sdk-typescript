@@ -1,0 +1,354 @@
+name: Publish TypeScript SDK
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Exact existing semantic tag, for example v1.2.3
+        required: true
+        type: string
+      release_sha:
+        description: Exact 40-character commit peeled from the authorized tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-npm-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-verify:
+    if: >-
+      ${{ github.repository == 'luranta/sdk-typescript' &&
+          ((github.event_name == 'push' && github.ref_type == 'tag') ||
+           (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) }}
+    permissions:
+      contents: read
+    runs-on: ${{ vars.LURANTA_LOCAL_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    outputs:
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      manifest_sha: ${{ steps.release.outputs.manifest_sha }}
+      package_sha: ${{ steps.artifact.outputs.package_sha }}
+      release_sha: ${{ steps.release.outputs.release_sha }}
+      source_sha: ${{ steps.release.outputs.source_sha }}
+      tree_sha: ${{ steps.release.outputs.tree_sha }}
+    steps:
+      - name: Validate exact release request
+        id: request
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          MANUAL_RELEASE_SHA: ${{ inputs.release_sha }}
+          MANUAL_RELEASE_TAG: ${{ inputs.release_tag }}
+          REF_NAME: ${{ github.ref_name }}
+          REQUEST_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            test "$REQUEST_REF" = "refs/heads/main"
+            release_tag="$MANUAL_RELEASE_TAG"
+            expected_sha="$MANUAL_RELEASE_SHA"
+          else
+            release_tag="$REF_NAME"
+            expected_sha="$EVENT_SHA"
+          fi
+          [[ "$release_tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$expected_sha" =~ ^[0-9a-f]{40}$ ]]
+          printf 'release_tag=%s\n' "$release_tag" >> "$GITHUB_OUTPUT"
+          printf 'expected_sha=%s\n' "$expected_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the exact release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ steps.request.outputs.release_tag }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Verify annotated tag, main ancestry and release manifest
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          EXPECTED_RELEASE_SHA: ${{ steps.request.outputs.expected_sha }}
+          RELEASE_TAG: ${{ steps.request.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          test "$(git cat-file -t "refs/tags/$RELEASE_TAG")" = "tag"
+          tag_object_sha="$(git rev-parse "refs/tags/$RELEASE_TAG")"
+          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          test "$(git rev-parse HEAD)" = "$release_sha"
+          git merge-base --is-ancestor "$release_sha" refs/remotes/origin/main
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            test "$release_sha" = "$EXPECTED_RELEASE_SHA"
+          elif [[ "$EVENT_SHA" != "$tag_object_sha" && "$EVENT_SHA" != "$release_sha" ]]; then
+            echo "The pushed tag does not resolve to the triggering Git object." >&2
+            exit 1
+          fi
+          git for-each-ref --format='%(contents)' "refs/tags/$RELEASE_TAG" > "$RUNNER_TEMP/luranta-sdk-tag-message.txt"
+          RELEASE_SHA="$release_sha" node --input-type=module <<'NODE'
+          import { appendFileSync, lstatSync, readFileSync, readdirSync } from "node:fs"
+          import { createHash } from "node:crypto"
+          import { resolve } from "node:path"
+
+          const fail = (message) => { throw new Error(message) }
+          const hash = (value) => createHash("sha256").update(value).digest("hex")
+          const manifestBytes = readFileSync("release-manifest.json")
+          const manifest = JSON.parse(manifestBytes.toString("utf8"))
+          if (
+            manifest.schemaVersion !== 1 ||
+            manifest.repository !== "luranta/sdk-typescript" ||
+            manifest.tag !== process.env.RELEASE_TAG ||
+            manifest.version !== process.env.RELEASE_TAG.slice(1) ||
+            manifest.source?.repository !== "luranta/jobs" ||
+            !/^[0-9a-f]{40}$/u.test(manifest.source?.commit ?? "") ||
+            !/^[0-9a-f]{64}$/u.test(manifest.treeSha256 ?? "") ||
+            !Array.isArray(manifest.files)
+          ) fail("The TypeScript SDK release manifest metadata is invalid.")
+
+          const actualFiles = []
+          const visit = (directory) => {
+            for (const entry of readdirSync(directory, { withFileTypes: true })) {
+              if (directory === "." && entry.name === ".git") continue
+              const path = directory === "." ? entry.name : `${directory.slice(2)}/${entry.name}`
+              const absolute = resolve(path)
+              const metadata = lstatSync(absolute)
+              if (metadata.isSymbolicLink()) fail(`Release tree contains a symlink: ${path}`)
+              if (metadata.isDirectory()) visit(`./${path}`)
+              else if (metadata.isFile()) actualFiles.push(path)
+              else fail(`Release tree contains a non-regular file: ${path}`)
+            }
+          }
+          visit(".")
+          actualFiles.sort()
+
+          const declared = manifest.files.map((file) => {
+            if (
+              typeof file?.path !== "string" ||
+              !/^[0-9a-f]{64}$/u.test(file.sha256 ?? "") ||
+              !Number.isSafeInteger(file.size) ||
+              file.size < 0 ||
+              file.path === "release-manifest.json" ||
+              file.path.startsWith("/") ||
+              file.path.includes("..")
+            ) fail("The release manifest contains an invalid file entry.")
+            const bytes = readFileSync(file.path)
+            if (bytes.length !== file.size || hash(bytes) !== file.sha256)
+              fail(`Release file digest mismatch: ${file.path}`)
+            return file
+          }).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0)
+          const declaredPaths = declared.map((file) => file.path)
+          if (new Set(declaredPaths).size !== declaredPaths.length)
+            fail("The release manifest contains duplicate paths.")
+          if (JSON.stringify(actualFiles) !== JSON.stringify([...declaredPaths, "release-manifest.json"].sort()))
+            fail("The release tree differs from its immutable manifest.")
+          const treeDescriptor = declared
+            .map((file) => `${file.sha256} ${file.size} ${file.path}\n`)
+            .join("")
+          if (hash(treeDescriptor) !== manifest.treeSha256)
+            fail("The release tree digest is invalid.")
+
+          const manifestSha = hash(manifestBytes)
+          const message = readFileSync(
+            `${process.env.RUNNER_TEMP}/luranta-sdk-tag-message.txt`,
+            "utf8",
+          ).trimEnd()
+          const lines = message.split("\n")
+          if (lines[0] !== `Luranta SDK release ${process.env.RELEASE_TAG}`)
+            fail("The annotated release tag title is invalid.")
+          const fields = Object.fromEntries(
+            lines.slice(1).flatMap((line) => {
+              const separator = line.indexOf(": ")
+              return separator < 0 ? [] : [[line.slice(0, separator), line.slice(separator + 2)]]
+            }),
+          )
+          if (
+            fields.repository !== manifest.repository ||
+            fields["release-commit"] !== process.env.RELEASE_SHA ||
+            fields["release-manifest-sha256"] !== manifestSha ||
+            fields["tree-sha256"] !== manifest.treeSha256 ||
+            fields["source-repository"] !== manifest.source.repository ||
+            fields["source-commit"] !== manifest.source.commit
+          ) fail("The annotated tag is not bound to the release manifest.")
+
+          appendFileSync(process.env.GITHUB_OUTPUT, [
+            `manifest_sha=${manifestSha}`,
+            `release_sha=${process.env.RELEASE_SHA}`,
+            `source_sha=${manifest.source.commit}`,
+            `tree_sha=${manifest.treeSha256}`,
+            "",
+          ].join("\n"))
+          NODE
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+
+      - name: Install release Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.7.0
+          package-manager-cache: false
+
+      - name: Install npm packaging client
+        run: |
+          npm install --global --ignore-scripts --no-audit --no-fund npm@12.0.2
+          test "$(npm --version)" = "12.0.2"
+
+      - name: Install exact dependencies without lifecycle scripts
+        run: bun --no-env-file install --frozen-lockfile --ignore-scripts
+
+      - name: Verify and pack package without publishing authority
+        id: artifact
+        env:
+          MANIFEST_SHA: ${{ steps.release.outputs.manifest_sha }}
+          RELEASE_SHA: ${{ steps.release.outputs.release_sha }}
+          RELEASE_TAG: ${{ steps.request.outputs.release_tag }}
+          SOURCE_SHA: ${{ steps.release.outputs.source_sha }}
+          TREE_SHA: ${{ steps.release.outputs.tree_sha }}
+        run: |
+          set -euo pipefail
+          bun --no-env-file run verify
+          mkdir -p release-artifact/package
+          npm pack --ignore-scripts --json --pack-destination release-artifact/package > "$RUNNER_TEMP/luranta-sdk-npm-pack.json"
+          node --input-type=module <<'NODE'
+          import { appendFileSync, copyFileSync, lstatSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
+          import { createHash } from "node:crypto"
+          import { basename, resolve } from "node:path"
+
+          const packedRaw = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/luranta-sdk-npm-pack.json`, "utf8"))
+          const packed = Array.isArray(packedRaw)
+            ? packedRaw
+            : packedRaw && typeof packedRaw === "object"
+              ? Object.values(packedRaw)
+              : []
+          if (packed.length !== 1 || typeof packed[0]?.filename !== "string")
+            throw new Error("npm pack did not produce exactly one package.")
+          const filename = basename(packed[0].filename)
+          if (!/^luranta-sdk-\d+\.\d+\.\d+\.tgz$/u.test(filename))
+            throw new Error("npm pack produced an unexpected filename.")
+          const packagePath = `release-artifact/package/${filename}`
+          const packageMetadata = lstatSync(packagePath)
+          if (!packageMetadata.isFile() || packageMetadata.isSymbolicLink())
+            throw new Error("npm pack output is not a regular file.")
+          if (readdirSync("release-artifact/package").length !== 1)
+            throw new Error("npm pack produced unexpected files.")
+          const packageSha = createHash("sha256").update(readFileSync(packagePath)).digest("hex")
+          copyFileSync("release-manifest.json", "release-artifact/release-manifest.json")
+          const artifactManifest = {
+            package: { path: `package/${filename}`, sha256: packageSha, size: packageMetadata.size },
+            release: {
+              commit: process.env.RELEASE_SHA,
+              manifestSha256: process.env.MANIFEST_SHA,
+              sourceCommit: process.env.SOURCE_SHA,
+              tag: process.env.RELEASE_TAG,
+              treeSha256: process.env.TREE_SHA,
+            },
+            repository: "luranta/sdk-typescript",
+            schemaVersion: 1,
+          }
+          writeFileSync("release-artifact/artifact-manifest.json", `${JSON.stringify(artifactManifest, null, 2)}\n`)
+          appendFileSync(process.env.GITHUB_OUTPUT, `package_sha=${packageSha}\n`)
+          NODE
+
+      - name: Upload immutable npm release artifact
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sdk-npm-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-artifact
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  publish:
+    needs: build-and-verify
+    environment:
+      name: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    # npm Trusted Publishing currently requires a GitHub-hosted runner.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download the exact immutable build artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.build-and-verify.outputs.artifact_id }}
+          path: release-artifact
+          digest-mismatch: error
+
+      - name: Install release Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.7.0
+          package-manager-cache: false
+
+      - name: Verify downloaded artifact digests
+        id: artifact
+        env:
+          EXPECTED_ARTIFACT_DIGEST: ${{ needs.build-and-verify.outputs.artifact_digest }}
+          EXPECTED_MANIFEST_SHA: ${{ needs.build-and-verify.outputs.manifest_sha }}
+          EXPECTED_PACKAGE_SHA: ${{ needs.build-and-verify.outputs.package_sha }}
+          EXPECTED_RELEASE_SHA: ${{ needs.build-and-verify.outputs.release_sha }}
+          EXPECTED_SOURCE_SHA: ${{ needs.build-and-verify.outputs.source_sha }}
+          EXPECTED_TREE_SHA: ${{ needs.build-and-verify.outputs.tree_sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, lstatSync, readFileSync, readdirSync } from "node:fs"
+          import { createHash } from "node:crypto"
+          import { resolve } from "node:path"
+
+          const hashFile = (path) => createHash("sha256").update(readFileSync(path)).digest("hex")
+          if (!/^[0-9a-f]{64}$/u.test(process.env.EXPECTED_ARTIFACT_DIGEST ?? ""))
+            throw new Error("The uploaded artifact digest is invalid.")
+          const manifest = JSON.parse(readFileSync("release-artifact/artifact-manifest.json", "utf8"))
+          if (
+            manifest.schemaVersion !== 1 ||
+            manifest.repository !== "luranta/sdk-typescript" ||
+            manifest.release?.commit !== process.env.EXPECTED_RELEASE_SHA ||
+            manifest.release?.sourceCommit !== process.env.EXPECTED_SOURCE_SHA ||
+            manifest.release?.treeSha256 !== process.env.EXPECTED_TREE_SHA ||
+            manifest.release?.manifestSha256 !== process.env.EXPECTED_MANIFEST_SHA ||
+            manifest.package?.sha256 !== process.env.EXPECTED_PACKAGE_SHA ||
+            !/^package\/luranta-sdk-\d+\.\d+\.\d+\.tgz$/u.test(manifest.package?.path ?? "")
+          ) throw new Error("The npm artifact manifest is invalid.")
+          const packagePath = `release-artifact/${manifest.package.path}`
+          const metadata = lstatSync(packagePath)
+          if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size !== manifest.package.size)
+            throw new Error("The npm package artifact is not the declared regular file.")
+          if (hashFile(packagePath) !== manifest.package.sha256)
+            throw new Error("The npm package artifact digest does not match.")
+          if (hashFile("release-artifact/release-manifest.json") !== process.env.EXPECTED_MANIFEST_SHA)
+            throw new Error("The source release manifest digest does not match.")
+          const actual = [
+            ...readdirSync("release-artifact").filter((name) => name !== "package"),
+            ...readdirSync("release-artifact/package").map((name) => `package/${name}`),
+          ].sort()
+          const expected = ["artifact-manifest.json", "release-manifest.json", manifest.package.path].sort()
+          if (JSON.stringify(actual) !== JSON.stringify(expected))
+            throw new Error("The downloaded npm artifact contains unexpected files.")
+          for (const path of actual) {
+            const downloaded = lstatSync(`release-artifact/${path}`)
+            if (!downloaded.isFile() || downloaded.isSymbolicLink())
+              throw new Error(`The downloaded npm artifact contains a non-regular file: ${path}`)
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `package_path=${manifest.package.path}\n`)
+          NODE
+
+      - name: Install npm trusted-publishing client
+        run: |
+          npm install --global --ignore-scripts --no-audit --no-fund npm@12.0.2
+          test "$(npm --version)" = "12.0.2"
+
+      - name: Publish immutable package with npm Trusted Publishing
+        run: npm publish "release-artifact/${{ steps.artifact.outputs.package_path }}" --access public --ignore-scripts --provenance

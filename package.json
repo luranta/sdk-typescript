@@ -1,0 +1,47 @@
+{
+  "name": "@luranta/sdk",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Official TypeScript SDK for the Luranta API.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/luranta/sdk-typescript.git"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "check": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project tsconfig.node.json && tsc --noEmit --project tsconfig.browser.json",
+    "test": "bun test --bail tests",
+    "test:browser": "bun run scripts/check-browser.ts",
+    "test:node": "node --test tests/node-smoke.ts",
+    "verify": "bun run build && bun run check && bun run test && bun run test:node && bun run test:browser"
+  },
+  "dependencies": {
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "bun-types": "1.4.0",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "bun": ">=1.4.0",
+    "node": ">=26.7.0"
+  }
+}
